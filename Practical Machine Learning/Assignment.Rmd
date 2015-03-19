@@ -1,0 +1,111 @@
+---
+title: "Coursera Practical Machine Learning Peer Assessment"
+author: "Alvin Goh"
+date: "March 2015"
+output: html_document
+---
+
+Introduction
+------------
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this document, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, who were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The data for this assignment come from this source: http://groupware.les.inf.puc-rio.br/har. Many thanks to the people behind it as they have been very generous in allowing their data to be used.
+
+```{r}
+library(caret)
+library(randomForest)
+```
+
+Getting and Cleaning Data
+-------------------------
+
+The training data is from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data is from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+Both files are downloaded and stored without anything done to them.
+
+We will first read in the data set from file and discard variables which are not numeric or have more than 10% NA values. Remaining variables don't have NA values, so further cleaning is not necessary.
+
+
+```{r}
+readData <- function(fileName) {
+        data <- read.csv(fileName)
+        dataClean <- data.frame(X = data$X)
+
+        for(varName in names(data)) {
+                if(varName %in% c("raw_timestamp_part_1", "raw_timestamp_part_2", "X", "num_window")) {
+                        next
+                }
+
+                var <- data[, varName]
+                if(!is.numeric(var)) {
+                        var <- as.numeric(as.character(var))
+                }
+
+                if (mean(is.na(var)) < 0.1) {
+                        dataClean[, varName] <- var
+                }
+        }
+        if ("classe" %in% names(data)) {
+                dataClean$classe <- data$classe
+        }
+        dataClean$X <- NULL  
+        dataClean
+}
+
+trainingData <- readData("C:/Users/Alvin/datasciencecoursera/Practical Machine Learning/pml-training.csv")
+testData <- readData("C:/Users/Alvin/datasciencecoursera/Practical Machine Learning/pml-testing.csv")
+```
+
+Training Model
+--------------
+
+Random forest method with 100 trees was used to obtain prediction model. The following function creates model from training data set.
+
+```{r}
+trainModel <- function(data) {
+        nTrees <- 100
+        model <- randomForest(classe ~ ., data = data, ntree = nTrees)
+}
+```
+
+Cross-Validation
+----------------
+
+K-fold cross validation with k=10 was used to assess performance of the model. The following code creates 10-fold partition of training set, trains models and collects prediction accuracies for every fold.
+
+```{r cache = TRUE}
+getAccuracy <- function(model, testData) {
+        confMatrix <- confusionMatrix(testData$classe, predict(model, testData))
+        as.numeric(confMatrix$overall)[1]
+}
+
+nFolds <- 10
+set.seed(1000)
+folds <- createFolds(y = trainingData$classe, k = nFolds)
+
+accuracy <- sapply(1:nFolds, function(i) {
+        part1 <- trainingData[-folds[[i]], ]
+        part2 <- trainingData[folds[[i]], ]
+        model <- trainModel(part1)
+        getAccuracy(model, part2)
+})
+```
+
+Minimum accuracy was `r min(accuracy)` and maximum accuracy was `r max(accuracy)`.
+
+Results
+-------
+Finally, a model was trained on the full training set and applied to testing set data.
+
+```{r}
+finalModel <- trainModel(trainingData)
+prediction <- predict(finalModel, testData)
+```
+
+Predicted activity classes are
+
+```{r}
+data.frame(classe = prediction)
+```
